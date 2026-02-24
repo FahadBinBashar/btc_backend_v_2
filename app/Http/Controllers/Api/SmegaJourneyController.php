@@ -82,6 +82,16 @@ class SmegaJourneyController extends BaseApiController
     {
         $payload = $request->validate([
             'metamap_verified' => ['required', 'boolean'],
+            'first_name' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['nullable', 'string', 'max:100'],
+            'gender' => ['nullable', 'string', 'max:20'],
+            'document_number' => ['nullable', 'string', 'max:100'],
+            'document_type' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:200'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'nationality' => ['nullable', 'string', 'max:100'],
+            'dob' => ['nullable', 'date'],
         ]);
 
         $serviceRequest = $this->findJourney($requestId);
@@ -90,17 +100,65 @@ class SmegaJourneyController extends BaseApiController
         }
 
         if ($payload['metamap_verified'] !== true) {
+            $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
+            $c1Lookup = is_array($metadata['c1_lookup'] ?? null) ? $metadata['c1_lookup'] : [];
+            $serviceInternalId = (string) ($c1Lookup['service_internal_id'] ?? '');
+            if ($serviceInternalId !== '') {
+                $this->btcGateway->c1SubscriberSuspend($serviceInternalId, 'Inline KYC failed');
+            }
+
             $serviceRequest->status = 'failed_metamap';
             $serviceRequest->save();
             return $this->fail('MetaMap failed. Journey blocked.', 422);
         }
 
         $bocra = $this->btcGateway->bocraCheckByMsisdn('267'.(string) $serviceRequest->msisdn);
+        if (!(bool) ($bocra['compliant'] ?? false)) {
+            $docCheck = $this->btcGateway->bocraCheckByDocument((string) ($payload['document_number'] ?? ''));
+            $register = $this->btcGateway->bocraRegisterSubscriber([
+                'msisdn' => '267'.(string) $serviceRequest->msisdn,
+                'first_name' => (string) ($payload['first_name'] ?? ''),
+                'last_name' => (string) ($payload['last_name'] ?? ''),
+                'gender' => (string) ($payload['gender'] ?? 'MALE'),
+                'document_number' => (string) ($payload['document_number'] ?? ''),
+                'document_type' => (string) ($payload['document_type'] ?? 'NATIONAL_ID'),
+                'physical_address' => (string) ($payload['address'] ?? ''),
+                'postal_address' => (string) ($payload['address'] ?? ''),
+                'city' => (string) ($payload['city'] ?? ''),
+            ]);
+            $bocra['doc_check'] = $docCheck;
+            $bocra['register'] = $register;
+            $bocra['compliant'] = (bool) ($register['ok'] ?? false);
+        }
+
         $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
+        $c1Lookup = is_array($metadata['c1_lookup'] ?? null) ? $metadata['c1_lookup'] : [];
+        $c1Updates = $this->btcGateway->c1ApplyConditionalUpdates([
+            'service_internal_id' => $c1Lookup['service_internal_id'] ?? null,
+            'msisdn' => '267'.(string) $serviceRequest->msisdn,
+            'first_name' => (string) ($payload['first_name'] ?? ''),
+            'last_name' => (string) ($payload['last_name'] ?? ''),
+            'address' => (string) ($payload['address'] ?? ''),
+            'city' => (string) ($payload['city'] ?? ''),
+            'email' => (string) ($payload['email'] ?? ''),
+            'nationality' => (string) ($payload['nationality'] ?? ''),
+            'document_number' => (string) ($payload['document_number'] ?? ''),
+            'dob' => (string) ($payload['dob'] ?? ''),
+            'gender' => (string) ($payload['gender'] ?? ''),
+            'resume' => true,
+        ]);
+
+        $lifecycle = null;
+        $serviceInternalId = (string) ($c1Lookup['service_internal_id'] ?? '');
+        if ($serviceInternalId !== '') {
+            $lifecycle = $this->btcGateway->c1SubscriberResume($serviceInternalId, 'SMEGA inline KYC complete');
+        }
+
         $metadata['inline_kyc'] = [
             'metamap_verified' => true,
             'bocra' => $bocra,
-            'c1_updates' => ['triggered' => true, 'mode' => 'conditional'],
+            'c1_updates' => $c1Updates,
+            'c1_lifecycle' => $lifecycle,
         ];
 
         $serviceRequest->status = 'compliant';
@@ -216,11 +274,26 @@ class SmegaJourneyController extends BaseApiController
             ],
         ]);
 
+        $externalLog = $this->btcGateway->logTransaction([
+            'journey_id' => 'jrn-'.$serviceRequest->id,
+            'event_type' => 'API_CALL',
+            'correlation_id' => (string) ($request->header('x-correlation-id') ?? ('jrn-'.$serviceRequest->id)),
+            'actor' => 'SYSTEM',
+            'action' => 'SMEGA_COMPLETE',
+            'outcome' => 'SUCCESS',
+            'msisdn' => '****'.substr((string) $serviceRequest->msisdn, -4),
+            'api_called' => 'SMEGA_JOURNEY_COMPLETE',
+            'request_payload' => ['request_id' => $serviceRequest->id],
+            'response_payload' => $metadata['smega'],
+            'status_code' => '200',
+        ]);
+
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
             'status' => 'SMEGA Complete',
             'profile_exists' => $exists,
             'registered' => $register ? (bool) ($register['ok'] ?? false) : false,
+            'external_log_ok' => (bool) ($externalLog['ok'] ?? false),
         ]);
     }
 

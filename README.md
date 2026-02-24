@@ -59,3 +59,39 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 # btc_backend
 "# btc_backend_v_2" 
+
+## BTC API Parity Matrix (Rev 1.2 / V2.0)
+
+### Security
+- `SecurityToken` -> `App\Services\BtcGatewayService::c1SecurityToken()` (internal helper used before C1 SOAP calls)
+
+### Billing and Subscriber Management (C1)
+- `SubscriberRetrieve` -> `c1SubscriberRetrieve()`
+- `SubscriberResume` -> `c1SubscriberResume()`
+- `SubscriberSuspend` -> `c1SubscriberSuspend()`
+- `SubscriberUpdate` -> `c1SubscriberUpdate()` (through `c1ApplyConditionalUpdates()`)
+- `AccountUpdate` -> `c1AccountBaseUpdate()` (through `c1ApplyConditionalUpdates()`)
+- `AddressUpdate` -> `c1AddressUpdate()` (through `c1ApplyConditionalUpdates()`)
+- `PersonaUpdate` -> `c1PersonaUpdate()` (through `c1ApplyConditionalUpdates()`)
+- `ResumeForBillingRating` -> `c1UpdateRatingStatus()` (through `c1ApplyConditionalUpdates()`)
+
+### Regulatory APIs (BOCRA)
+- `CheckRegistration` -> `bocraCheckByMsisdn()`, `bocraCheckByDocument()`
+- `Registration` -> `bocraRegisterSubscriber()`
+
+### SMEGA Integration
+- `CheckSmega` -> `smegaCheck()`
+- `RegisterSmega` -> `smegaRegister()`
+
+### Logging and Audit
+- `PersistTransaction` -> `logTransaction()` (`MIDDLEWARE_LOG_URL`)
+- `AuditLogging` -> local DB `audit_logs` via `AuditLog` model
+
+### Journey Controllers
+- KYC journey (with/without SMEGA): `App\Http\Controllers\Api\KycJourneyController`
+- SMEGA standalone: `App\Http\Controllers\Api\SmegaJourneyController`
+
+### Notes
+- C1 update APIs run conditionally and depend on available IDs (`service_internal_id`, optional `account_internal_id`, optional `persona_internal_id`).
+- MetaMap gate is mandatory for full KYC paths; failed gate triggers C1 suspend when `service_internal_id` is available.
+- Completion triggers C1 resume when `service_internal_id` is available.

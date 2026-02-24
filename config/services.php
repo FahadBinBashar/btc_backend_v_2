@@ -73,4 +73,8 @@ return [
         'api_key' => env('BOCRA_API_KEY', env('bocra_api_key')),
     ],
 
+    'middleware' => [
+        'log_url' => env('MIDDLEWARE_LOG_URL', env('middleware_host')),
+    ],
+
 ];

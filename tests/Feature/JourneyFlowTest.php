@@ -13,9 +13,12 @@ class JourneyFlowTest extends TestCase
     public function test_kyc_with_smega_short_track_flow_completes(): void
     {
         $this->mock(BtcGatewayService::class, function ($mock) {
+            $mock->shouldIgnoreMissing();
             $mock->shouldReceive('c1SubscriberRetrieve')->once()->andReturn(['ok' => true, 'exists' => true]);
             $mock->shouldReceive('smegaCheck')->once()->andReturn(['ok' => true, 'body' => 'not exists']);
             $mock->shouldReceive('smegaRegister')->once()->andReturn(['ok' => true, 'status' => 200]);
+            $mock->shouldReceive('c1ApplyConditionalUpdates')->once()->andReturn(['ok' => true, 'steps' => []]);
+            $mock->shouldReceive('logTransaction')->once()->andReturn(['ok' => true, 'status' => 200]);
         });
 
         $start = $this->postJson('/api/kyc/start', [
@@ -52,8 +55,11 @@ class JourneyFlowTest extends TestCase
     public function test_kyc_standalone_full_kyc_requires_metamap_verification(): void
     {
         $this->mock(BtcGatewayService::class, function ($mock) {
+            $mock->shouldIgnoreMissing();
             $mock->shouldReceive('c1SubscriberRetrieve')->once()->andReturn(['ok' => false, 'exists' => false]);
             $mock->shouldReceive('bocraCheckByMsisdn')->once()->andReturn(['ok' => true, 'compliant' => true]);
+            $mock->shouldReceive('c1ApplyConditionalUpdates')->once()->andReturn(['ok' => true, 'steps' => []]);
+            $mock->shouldReceive('logTransaction')->once()->andReturn(['ok' => true, 'status' => 200]);
         });
 
         $start = $this->postJson('/api/kyc/start', [
@@ -98,10 +104,13 @@ class JourneyFlowTest extends TestCase
     public function test_smega_standalone_non_compliant_runs_inline_kyc_then_completes(): void
     {
         $this->mock(BtcGatewayService::class, function ($mock) {
+            $mock->shouldIgnoreMissing();
             $mock->shouldReceive('c1SubscriberRetrieve')->once()->andReturn(['ok' => false, 'exists' => false]);
             $mock->shouldReceive('bocraCheckByMsisdn')->once()->andReturn(['ok' => true, 'compliant' => true]);
+            $mock->shouldReceive('c1ApplyConditionalUpdates')->once()->andReturn(['ok' => true, 'steps' => []]);
             $mock->shouldReceive('smegaCheck')->once()->andReturn(['ok' => true, 'body' => 'not exists']);
             $mock->shouldReceive('smegaRegister')->once()->andReturn(['ok' => true]);
+            $mock->shouldReceive('logTransaction')->once()->andReturn(['ok' => true, 'status' => 200]);
         });
 
         $start = $this->postJson('/api/smega/start')->assertCreated();
@@ -130,4 +139,3 @@ class JourneyFlowTest extends TestCase
             ->assertJsonPath('registered', true);
     }
 }
-

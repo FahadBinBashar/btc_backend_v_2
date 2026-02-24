@@ -1,0 +1,899 @@
+{
+  "info": {
+    "_postman_id": "0cf29e93-70db-4c05-bf0f-b8530652486f",
+    "name": "BTC eKYC APIs - Rev 1.2",
+    "description": "BTC Digital Services eKYC API Collection - January 2026",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "27980978",
+    "_collection_link": "https://go.postman.co/collection/27980978-0cf29e93-70db-4c05-bf0f-b8530652486f?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "🔐 SECURITY",
+      "item": [
+        {
+          "name": "1. Get Security Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:auth=\"https://org.converse.rtbd.sec/webservice/auth\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <auth:proxyLogin>\n         <String_1>{{c1_username}}</String_1>\n         <String_2>{{c1_password}}</String_2>\n         <String_3>{{c1_realm}}</String_3>\n      </auth:proxyLogin>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{c1_host}}/SAMLSignOnWS?wsdl",
+              "protocol": "https",
+              "host": [
+                "{{c1_host}}"
+              ],
+              "path": [
+                "SAMLSignOnWS"
+              ],
+              "query": [
+                {
+                  "key": "wsdl",
+                  "value": null
+                }
+              ]
+            },
+            "description": "Authenticate and retrieve SecurityToken for C1 API access"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "💰 BILLING (C1)",
+      "item": [
+        {
+          "name": "2. Subscriber Retrieve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.comverse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:SubscriberRetrieve>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <subscriberId>\n               <subscriberId>\n                  <value>{{msisdn}}</value>\n               </subscriberId>\n               <subscriberExternalIdType>\n                  <value>1</value>\n               </subscriberExternalIdType>\n            </subscriberId>\n            <info>\n               <attribs>1</attribs>\n               <useBillingDB changed=\"true\" set=\"true\">\n                  <value>true</value>\n               </useBillingDB>\n               <subscriberData changed=\"true\" set=\"true\">\n                  <value>true</value>\n               </subscriberData>\n               <balances changed=\"true\" set=\"true\">\n                  <value>1</value>\n               </balances>\n               <externalIds changed=\"true\" set=\"true\">\n                  <value>true</value>\n               </externalIds>\n               <offers changed=\"true\" set=\"true\">\n                  <value>true</value>\n               </offers>\n            </info>\n         </com:input>\n      </com:SubscriberRetrieve>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/SubscriberService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "SubscriberService"
+              ]
+            },
+            "description": "Check if MSISDN exists and retrieve subscriber info including serviceInternalId"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Subscriber Resume",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:SubscriberResumeBilling>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <subscriberId>\n               <serviceInternalId set=\"true\" changed=\"true\">\n                  <value>{{service_internal_id}}</value>\n               </serviceInternalId>\n               <serviceInternalIdResets set=\"true\" changed=\"true\">\n                  <value>0</value>\n               </serviceInternalIdResets>\n            </subscriberId>\n            <statusReasonId>13</statusReasonId>\n            <comment>KYC compliant</comment>\n            <autoCommitOrder>1</autoCommitOrder>\n            <generateWorkflow>true</generateWorkflow>\n         </com:input>\n      </com:SubscriberResumeBilling>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/SubscriberService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "SubscriberService"
+              ]
+            },
+            "description": "Resume suspended service (statusReasonId: 13 = KYC compliant)"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Subscriber Suspend",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:SubscriberSuspendBilling>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <subscriberId>\n               <serviceInternalId set=\"true\" changed=\"true\">\n                  <value>{{service_internal_id}}</value>\n               </serviceInternalId>\n               <serviceInternalIdResets set=\"true\" changed=\"true\">\n                  <value>0</value>\n               </serviceInternalIdResets>\n            </subscriberId>\n            <statusReasonId>13</statusReasonId>\n            <comment>NON COMPLIANT FOR KYC</comment>\n            <autoCommitOrder>1</autoCommitOrder>\n            <generateWorkflow>true</generateWorkflow>\n         </com:input>\n      </com:SubscriberSuspendBilling>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/SubscriberService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "SubscriberService"
+              ]
+            },
+            "description": "Suspend service for non-KYC compliance (statusReasonId: 13)"
+          },
+          "response": []
+        },
+        {
+          "name": "5. Subscriber Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:SubscriberUpdate>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <subscriber>\n               <attribs>0</attribs>\n               <serviceInternalId changed=\"true\" set=\"true\">\n                  <value>{{service_internal_id}}</value>\n               </serviceInternalId>\n               <serviceInternalIdResets changed=\"true\" set=\"true\">\n                  <value>0</value>\n               </serviceInternalIdResets>\n               <serviceCompany changed=\"true\" set=\"true\">\n                  <value>BTC</value>\n               </serviceCompany>\n               <serviceFname changed=\"true\" set=\"true\">\n                  <value>{{first_name}}</value>\n               </serviceFname>\n               <serviceLname changed=\"true\" set=\"true\">\n                  <value>{{last_name}}</value>\n               </serviceLname>\n               <servicePhone changed=\"true\" set=\"true\">\n                  <value>{{msisdn}}</value>\n               </servicePhone>\n               <servicePhone2 changed=\"true\" set=\"true\">\n                  <value>{{alt_phone}}</value>\n               </servicePhone2>\n               <streetName changed=\"true\" set=\"true\">\n                  <value>{{street}}</value>\n               </streetName>\n               <extendedData changed=\"false\" set=\"true\">\n                  <value>ExtendedData XML here</value>\n               </extendedData>\n            </subscriber>\n            <personas>\n               <attribs>0</attribs>\n               <person>\n                  <attribs>0</attribs>\n                  <addressline1 changed=\"true\" set=\"true\">\n                     <value>{{address_line1}}</value>\n                  </addressline1>\n                  <city changed=\"true\" set=\"true\">\n                     <value>{{city}}</value>\n                  </city>\n                  <dateOfBirth changed=\"true\" set=\"true\">\n                     <value>{{dob}}</value>\n                  </dateOfBirth>\n                  <email changed=\"true\" set=\"true\">\n                     <value>{{email}}</value>\n                  </email>\n                  <firstName changed=\"true\" set=\"true\">\n                     <value>{{first_name}}</value>\n                  </firstName>\n                  <gender changed=\"true\" set=\"true\">\n                     <value>{{gender}}</value>\n                  </gender>\n                  <lastName changed=\"true\" set=\"true\">\n                     <value>{{last_name}}</value>\n                  </lastName>\n                  <mobile changed=\"true\" set=\"true\">\n                     <value>{{mobile}}</value>\n                  </mobile>\n                  <nationalId changed=\"true\" set=\"true\">\n                     <value>{{national_id}}</value>\n                  </nationalId>\n                  <nationality changed=\"true\" set=\"true\">\n                     <value>{{nationality}}</value>\n                  </nationality>\n                  <phone changed=\"true\" set=\"true\">\n                     <value>{{phone}}</value>\n                  </phone>\n               </person>\n            </personas>\n            <autoCommitOrder>1</autoCommitOrder>\n         </com:input>\n      </com:SubscriberUpdate>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/SubscriberService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "SubscriberService"
+              ]
+            },
+            "description": "Update subscriber details in billing platform"
+          },
+          "response": []
+        },
+        {
+          "name": "6-7. Account Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:AccountBaseUpdate>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <account>\n               <attribs>0</attribs>\n               <accountInternalId changed=\"true\" set=\"true\">\n                  <value>{{account_internal_id}}</value>\n               </accountInternalId>\n               <billAddress1 changed=\"true\" set=\"true\">\n                  <value>{{billing_address}}</value>\n               </billAddress1>\n               <billCity changed=\"true\" set=\"true\">\n                  <value>{{billing_city}}</value>\n               </billCity>\n               <billCompany changed=\"true\" set=\"true\">\n                  <value>BTC</value>\n               </billCompany>\n               <billCountryCode changed=\"true\" set=\"true\">\n                  <value>72</value>\n               </billCountryCode>\n               <billFname changed=\"true\" set=\"true\">\n                  <value>{{first_name}}</value>\n               </billFname>\n               <billLname changed=\"true\" set=\"true\">\n                  <value>{{last_name}}</value>\n               </billLname>\n               <contact1Name changed=\"true\" set=\"true\">\n                  <value>{{contact_name}}</value>\n               </contact1Name>\n               <contact1Phone changed=\"true\" set=\"true\">\n                  <value>{{contact_phone}}</value>\n               </contact1Phone>\n               <custCompanyName changed=\"true\" set=\"true\">\n                  <value>BTC</value>\n               </custCompanyName>\n               <custAddress1 changed=\"true\" set=\"true\">\n                  <value>{{customer_address}}</value>\n               </custAddress1>\n               <custCity changed=\"true\" set=\"true\">\n                  <value>{{customer_city}}</value>\n               </custCity>\n               <custCountryCode changed=\"true\" set=\"true\">\n                  <value>72</value>\n               </custCountryCode>\n               <custEmail changed=\"true\" set=\"true\">\n                  <value>{{customer_email}}</value>\n               </custEmail>\n               <custPhone1 changed=\"true\" set=\"true\">\n                  <value>{{customer_phone}}</value>\n               </custPhone1>\n               <custPhone2 changed=\"true\" set=\"true\">\n                  <value>{{customer_phone2}}</value>\n               </custPhone2>\n               <gender changed=\"true\" set=\"true\">\n                  <value>{{gender}}</value>\n               </gender>\n               <ssn changed=\"true\" set=\"true\">\n                  <value>{{ssn}}</value>\n               </ssn>\n               <statementToEmail changed=\"true\" set=\"true\">\n                  <value>{{statement_email}}</value>\n               </statementToEmail>\n               <extendedData changed=\"false\" set=\"true\">\n                  <value>ExtendedData XML</value>\n               </extendedData>\n            </account>\n            <extObject>\n               <attribs>0</attribs>\n            </extObject>\n         </com:input>\n      </com:AccountBaseUpdate>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/AccountService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "AccountService"
+              ]
+            },
+            "description": "Update account-level details in billing platform"
+          },
+          "response": []
+        },
+        {
+          "name": "8. Persona Update",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:PersonaUpdate>\n         <com:input>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <persona>\n               <attribs>0</attribs>\n               <personaInternalId changed=\"true\" set=\"true\">\n                  <value>{{persona_internal_id}}</value>\n               </personaInternalId>\n               <firstName changed=\"true\" set=\"true\">\n                  <value>{{first_name}}</value>\n               </firstName>\n               <lastName changed=\"true\" set=\"true\">\n                  <value>{{last_name}}</value>\n               </lastName>\n               <nationalId changed=\"true\" set=\"true\">\n                  <value>{{national_id}}</value>\n               </nationalId>\n               <nationality changed=\"true\" set=\"true\">\n                  <value>{{nationality}}</value>\n               </nationality>\n               <dateOfBirth changed=\"true\" set=\"true\">\n                  <value>{{dob}}</value>\n               </dateOfBirth>\n               <gender changed=\"true\" set=\"true\">\n                  <value>{{gender}}</value>\n               </gender>\n            </persona>\n            <autoCommitOrder>1</autoCommitOrder>\n         </com:input>\n      </com:PersonaUpdate>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/PersonaService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "PersonaService"
+              ]
+            },
+            "description": "Update subscriber persona details"
+          },
+          "response": []
+        },
+        {
+          "name": "9. Update Rating Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml;charset=UTF-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:com=\"http://www.converse.com\">\n   <soapenv:Header/>\n   <soapenv:Body>\n      <com:SubscriberUpdateRatingStatus>\n         <com:input>\n            <ServerIdLocator>\n               <billingServerId>43</billingServerId>\n            </ServerIdLocator>\n            <realm>{{c1_realm}}</realm>\n            <securityToken>{{security_token}}</securityToken>\n            <userIdName>{{c1_username}}</userIdName>\n            <subscriberId>\n               <attribs>0</attribs>\n               <serviceInternalId changed=\"true\" set=\"true\">\n                  <value>{{service_internal_id}}</value>\n               </serviceInternalId>\n               <serviceInternalIdResets changed=\"true\" set=\"true\">\n                  <value>0</value>\n               </serviceInternalIdResets>\n            </subscriberId>\n            <postRatingState>2</postRatingState>\n            <extObject>\n               <attribs>0</attribs>\n            </extObject>\n         </com:input>\n      </com:SubscriberUpdateRatingStatus>\n   </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{c1_billing_host}}/services/SubscriberService",
+              "protocol": "http",
+              "host": [
+                "{{c1_billing_host}}"
+              ],
+              "path": [
+                "services",
+                "SubscriberService"
+              ]
+            },
+            "description": "Activate/Deactivate account in billing platform (postRatingState: 2 = active)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏛️ BOCRA",
+      "item": [
+        {
+          "name": "10. Check Registration by MSISDN",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bocra_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "https://{{bocra_host}}/api/v1/phone_numbers/msisdn/{{msisdn}}",
+              "protocol": "https",
+              "host": [
+                "{{bocra_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "phone_numbers",
+                "msisdn",
+                "{{msisdn}}"
+              ]
+            },
+            "description": "Check if subscriber is registered at BOCRA by phone number"
+          },
+          "response": []
+        },
+        {
+          "name": "11. Check Registration by Document",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-api-key",
+                "value": "{{bocra_api_key}}"
+              }
+            ],
+            "url": {
+              "raw": "https://{{bocra_host}}/api/v1/natural_subscribers/{{document_number}}",
+              "protocol": "https",
+              "host": [
+                "{{bocra_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "natural_subscribers",
+                "{{document_number}}"
+              ]
+            },
+            "description": "Fetch subscriber details from BOCRA by Omang/Passport number"
+          },
+          "response": []
+        },
+        {
+          "name": "12. Register at BOCRA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{bocra_api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"msisdn\": \"{{msisdn}}\",\n  \"firstName\": \"{{first_name}}\",\n  \"lastName\": \"{{last_name}}\",\n  \"country\": \"BOTSWANA\",\n  \"dateOfBirth\": \"{{dob_iso}}\",\n  \"sex\": \"{{gender}}\",\n  \"documents\": [\n    {\n      \"documentNumber\": \"{{document_number}}\",\n      \"documentType\": \"{{document_type}}\",\n      \"dateOfIssue\": \"{{document_issue_date}}\",\n      \"expiryDate\": \"{{document_expiry_date}}\"\n    }\n  ],\n  \"addresses\": [\n    {\n      \"plotWardBox\": \"{{physical_address}}\",\n      \"cityTown\": \"{{city}}\",\n      \"addressType\": \"PHYSICAL\"\n    },\n    {\n      \"plotWardBox\": \"{{postal_address}}\",\n      \"cityTown\": \"{{city}}\",\n      \"addressType\": \"POSTAL\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{bocra_host}}/api/v1/natural_subscribers/update_address_documents",
+              "protocol": "https",
+              "host": [
+                "{{bocra_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "natural_subscribers",
+                "update_address_documents"
+              ]
+            },
+            "description": "Register new subscriber at BOCRA national registry"
+          },
+          "response": []
+        },
+        {
+          "name": "12b. Update BOCRA Subscriber (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{bocra_api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{bocra_subscriber_id}}\",\n  \"firstName\": \"{{first_name}}\",\n  \"lastName\": \"{{last_name}}\",\n  \"country\": \"Botswana\",\n  \"dateOfBirth\": \"{{dob_iso}}\",\n  \"sex\": \"{{gender}}\",\n  \"documents\": [\n    {\n      \"documentNumber\": \"{{document_number}}\",\n      \"documentType\": \"NATIONAL_ID\",\n      \"dateOfIssue\": \"{{document_issue_date}}\",\n      \"expiryDate\": \"{{document_expiry_date}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{bocra_host}}/api/v1/natural_subscribers",
+              "protocol": "https",
+              "host": [
+                "{{bocra_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "natural_subscribers"
+              ]
+            },
+            "description": "Update existing BOCRA subscriber details"
+          },
+          "response": []
+        },
+        {
+          "name": "12c. Update BOCRA Address/Documents (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{bocra_api_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{bocra_subscriber_id}}\",\n  \"Documents\": [\n    {\n      \"documentNumber\": \"{{document_number}}\",\n      \"documentType\": \"NATIONAL_ID\",\n      \"dateOfIssue\": \"{{document_issue_date}}\",\n      \"expiryDate\": \"{{document_expiry_date}}\"\n    }\n  ],\n  \"addresses\": [\n    {\n      \"plotWardBox\": \"{{address}}\",\n      \"cityTown\": \"{{city}}\",\n      \"addressType\": \"POSTAL\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "https://{{bocra_host}}/api/v1/natural_subscribers/update_address_documents",
+              "protocol": "https",
+              "host": [
+                "{{bocra_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "natural_subscribers",
+                "update_address_documents"
+              ]
+            },
+            "description": "Update only address and document details for BOCRA subscriber"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📨 SMEGA",
+      "item": [
+        {
+          "name": "13. Check SMEGA",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://{{smega_host}}:8081/TxnWebapp/JsonSelector?LOGIN={{smega_login}}&PASSWORD={{smega_password}}&REQUEST_GATEWAY_CODE=USSD&REQUEST_GATEWAY_TYPE=USSD&requestText={{smega_check_request}}",
+              "protocol": "http",
+              "host": [
+                "{{smega_host}}"
+              ],
+              "port": "8081",
+              "path": [
+                "TxnWebapp",
+                "JsonSelector"
+              ],
+              "query": [
+                {
+                  "key": "LOGIN",
+                  "value": "{{smega_login}}"
+                },
+                {
+                  "key": "PASSWORD",
+                  "value": "{{smega_password}}"
+                },
+                {
+                  "key": "REQUEST_GATEWAY_CODE",
+                  "value": "USSD"
+                },
+                {
+                  "key": "REQUEST_GATEWAY_TYPE",
+                  "value": "USSD"
+                },
+                {
+                  "key": "requestText",
+                  "value": "{{smega_check_request}}"
+                }
+              ]
+            },
+            "description": "Check if SMEGA profile exists for MSISDN"
+          },
+          "response": []
+        },
+        {
+          "name": "14. Register SMEGA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"COMMAND\": {\n    \"TYPE\": \"RSUBREG\",\n    \"MSISDN\": \"{{msisdn}}\",\n    \"MPIN\": \"{{mpin}}\",\n    \"PIN\": \"\",\n    \"PROVIDER\": \"101\",\n    \"PAYID\": \"12\",\n    \"MSISDN2\": \"{{msisdn_alt}}\",\n    \"FNAME\": \"{{first_name}}\",\n    \"LNAME\": \"{{last_name}}\",\n    \"PROVIDER2\": \"101\",\n    \"PAYID2\": \"12\",\n    \"IDNUMBER\": \"{{document_number}}\",\n    \"DOB\": \"{{dob_short}}\",\n    \"GENDER\": \"{{gender}}\",\n    \"LANGUAGE1\": 1,\n    \"REGTYPEID\": \"FULL_KYC\",\n    \"BLOCKSMS\": \"\",\n    \"FTXNID\": \"{{transaction_id}}\",\n    \"IDTYPE\": \"NATIONAL_ID\",\n    \"ADDRESS\": \"{{address}}\",\n    \"CITY\": \"{{city}}\",\n    \"COUNTRY\": \"Botswana\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{smega_host}}:8081/TxnWebapp/JsonSelector?LOGIN={{smega_login}}&PASSWORD={{smega_password}}&REQUEST_GATEWAY_CODE=USSD&REQUEST_GATEWAY_TYPE=USSD",
+              "protocol": "http",
+              "host": [
+                "{{smega_host}}"
+              ],
+              "port": "8081",
+              "path": [
+                "TxnWebapp",
+                "JsonSelector"
+              ],
+              "query": [
+                {
+                  "key": "LOGIN",
+                  "value": "{{smega_login}}"
+                },
+                {
+                  "key": "PASSWORD",
+                  "value": "{{smega_password}}"
+                },
+                {
+                  "key": "REQUEST_GATEWAY_CODE",
+                  "value": "USSD"
+                },
+                {
+                  "key": "REQUEST_GATEWAY_TYPE",
+                  "value": "USSD"
+                }
+              ]
+            },
+            "description": "Register subscriber for SMEGA messaging service"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📝 LOGGING",
+      "item": [
+        {
+          "name": "15. Log Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"journey_id\": \"{{journey_id}}\",\n  \"event_type\": \"{{event_type}}\",\n  \"correlation_id\": \"{{correlation_id}}\",\n  \"actor\": \"{{actor}}\",\n  \"action\": \"{{action}}\",\n  \"outcome\": \"{{outcome}}\",\n  \"timestamp\": \"{{timestamp}}\",\n  \"msisdn\": \"{{msisdn}}\",\n  \"api_called\": \"{{api_name}}\",\n  \"request_payload\": \"{{request_payload}}\",\n  \"response_payload\": \"{{response_payload}}\",\n  \"status_code\": \"{{status_code}}\",\n  \"error_code\": \"{{error_code}}\",\n  \"error_message\": \"{{error_message}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://{{middleware_host}}/api/v1/log-transaction",
+              "protocol": "http",
+              "host": [
+                "{{middleware_host}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "log-transaction"
+              ]
+            },
+            "description": "Persist audit logs and transaction data for compliance"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔄 WORKFLOW SEQUENCES",
+      "item": [
+        {
+          "name": "KYC Full Journey",
+          "item": [
+            {
+              "name": "Step 1: Get Token",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 2: Subscriber Retrieve",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 3: BOCRA Check",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 4: BOCRA Register (if needed)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 5: Subscriber Update",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 6: Account Update",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 7: Resume Service",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Step 8: Log Transaction",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": ""
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "requests": {},
+        "exec": [
+          "// Auto-generate timestamp for requests",
+          "pm.globals.set(\"timestamp\", new Date().toISOString());",
+          "",
+          "// Generate correlation ID if not present",
+          "if (!pm.globals.get(\"correlation_id\")) {",
+          "    pm.globals.set(\"correlation_id\", pm.variables.replaceIn('{{$guid}}'));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "c1_host",
+      "value": "10.128.202.91:8443",
+      "description": "C1 Token Service Host"
+    },
+    {
+      "key": "c1_billing_host",
+      "value": "sapifarm.c1.btc.bw:8001",
+      "description": "C1 Billing Service Host"
+    },
+    {
+      "key": "c1_username",
+      "value": "BTCDevOpsProd"
+    },
+    {
+      "key": "c1_password",
+      "value": "DevOps12#"
+    },
+    {
+      "key": "c1_realm",
+      "value": "sapi"
+    },
+    {
+      "key": "security_token",
+      "value": "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",
+      "description": "Populated by API 1 response"
+    },
+    {
+      "key": "bocra_host",
+      "value": "simsapi.bocra.org.bw"
+    },
+    {
+      "key": "bocra_api_key",
+      "value": "BC.bUk37gtNG5w9T422BYAxHrIXITP32iFi.LuAZLfAhCDL4V235eXdhbKNzl/QXvDh7TO.."
+    },
+    {
+      "key": "smega_host",
+      "value": "10.6.1.238"
+    },
+    {
+      "key": "smega_login",
+      "value": "Usd_Bearer1"
+    },
+    {
+      "key": "smega_password",
+      "value": "MPtc1ToayCkCMZZeHUu0snA3aUaPbSFQ9Uz1kNGbVRU="
+    },
+    {
+      "key": "middleware_host",
+      "value": "localhost:8000"
+    },
+    {
+      "key": "msisdn",
+      "value": "26773717137"
+    },
+    {
+      "key": "service_internal_id",
+      "value": "8797264"
+    },
+    {
+      "key": "account_internal_id",
+      "value": "9875599"
+    },
+    {
+      "key": "first_name",
+      "value": "Moffat"
+    },
+    {
+      "key": "last_name",
+      "value": "Matenge"
+    },
+    {
+      "key": "document_number",
+      "value": "935512806"
+    },
+    {
+      "key": "document_type",
+      "value": "NATIONAL_ID"
+    },
+    {
+      "key": "dob",
+      "value": "1980-12-14"
+    },
+    {
+      "key": "dob_iso",
+      "value": "1980-12-14T00:00:00.000Z"
+    },
+    {
+      "key": "gender",
+      "value": "MALE"
+    },
+    {
+      "key": "nationality",
+      "value": "Motswana"
+    },
+    {
+      "key": "national_id",
+      "value": "935512806"
+    },
+    {
+      "key": "address_line1",
+      "value": "Plot 3501 Metlhabeng"
+    },
+    {
+      "key": "city",
+      "value": "Tlokweng"
+    },
+    {
+      "key": "email",
+      "value": "moffat@btc.bw"
+    },
+    {
+      "key": "phone",
+      "value": "26773717137"
+    },
+    {
+      "key": "mobile",
+      "value": "26773717137"
+    },
+    {
+      "key": "alt_phone",
+      "value": "26772302032"
+    },
+    {
+      "key": "street",
+      "value": "Metlhabeng"
+    },
+    {
+      "key": "journey_id",
+      "value": "jrn-001"
+    },
+    {
+      "key": "correlation_id",
+      "value": ""
+    },
+    {
+      "key": "event_type",
+      "value": "API_CALL"
+    },
+    {
+      "key": "actor",
+      "value": "SYSTEM"
+    },
+    {
+      "key": "action",
+      "value": "SUBSCRIBER_UPDATE"
+    },
+    {
+      "key": "outcome",
+      "value": "SUCCESS"
+    }
+  ]
+}

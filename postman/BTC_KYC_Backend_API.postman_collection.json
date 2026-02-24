@@ -477,7 +477,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"metamap_verified\": true\n}",
+              "raw": "{\n  \"metamap_verified\": true,\n  \"first_name\": \"Moffat\",\n  \"last_name\": \"Matenge\",\n  \"gender\": \"MALE\",\n  \"document_number\": \"935512806\",\n  \"document_type\": \"NATIONAL_ID\",\n  \"address\": \"Plot 3501 Metlhabeng\",\n  \"city\": \"Tlokweng\",\n  \"email\": \"moffat@btc.bw\",\n  \"nationality\": \"Motswana\",\n  \"dob\": \"1980-12-14\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
