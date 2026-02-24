@@ -68,15 +68,6 @@ class C1Controller extends Controller
 
     public function subscriberRetrieve(Request $request): JsonResponse
     {
-        $wsdl = 'http://'.trim((string) config('services.c1.billing_ip')).'/services/SubscriberService?wsdl';
-        $client = $this->makeSoapClient($wsdl, false);
-        if (!$client) {
-            return response()->json([
-                'success' => false,
-                'message' => 'SOAP client could not be initialized. Check PHP SOAP extension and C1 billing host.',
-            ], 500);
-        }
-
         $token = trim((string) $request->query('token', ''));
         if ($token === '') {
             try {
@@ -98,41 +89,23 @@ class C1Controller extends Controller
         }
 
         $msisdn = (string) $request->query('msisdn', (string) env('msisdn', '26773717137'));
-
-        $params = [
-            'input' => [
-                'realm' => (string) config('services.c1.realm', 'sapi'),
-                'securityToken' => $token,
-                'userIdName' => (string) config('services.c1.billing_user'),
-                'subscriberId' => [
-                    'subscriberId' => ['value' => $msisdn],
-                    'subscriberExternalIdType' => ['value' => 1],
-                ],
-                'info' => [
-                    'attribs' => 1,
-                    'useBillingDB' => true,
-                    'subscriberData' => true,
-                    'balances' => 1,
-                    'externalIds' => true,
-                    'offers' => true,
-                ],
-            ],
-        ];
-
-        try {
-            $response = $client->__soapCall('SubscriberRetrieve', [$params]);
-
-            return response()->json([
-                'success' => true,
-                'msisdn' => $msisdn,
-                'raw' => $response,
-            ]);
-        } catch (\Throwable $e) {
+        $result = $this->subscriberRetrieveViaCurl($token, $msisdn);
+        if (!($result['ok'] ?? false)) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => $result['error'] ?? 'SubscriberRetrieve failed',
+                'status' => $result['status'] ?? 0,
+                'raw' => $result['raw'] ?? '',
             ], 500);
         }
+
+        return response()->json([
+            'success' => true,
+            'msisdn' => $msisdn,
+            'status' => $result['status'] ?? 200,
+            'summary' => $this->summarizeSubscriberRetrieveXml((string) ($result['raw'] ?? '')),
+            'raw' => $request->boolean('debug') ? ($result['raw'] ?? '') : null,
+        ]);
     }
 
     private function fetchToken(): object
@@ -276,6 +249,80 @@ XML;
         ];
     }
 
+    private function subscriberRetrieveViaCurl(string $token, string $msisdn): array
+    {
+        $billingHost = trim((string) config('services.c1.billing_ip'));
+        $realm = (string) config('services.c1.realm', 'sapi');
+        $user = (string) config('services.c1.billing_user');
+
+        if ($billingHost === '' || $user === '') {
+            return ['ok' => false, 'error' => 'C1 billing config is incomplete', 'status' => 0, 'raw' => ''];
+        }
+
+        $xml = <<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <com:SubscriberRetrieve>
+      <com:input>
+        <realm>{$realm}</realm>
+        <securityToken>{$token}</securityToken>
+        <userIdName>{$user}</userIdName>
+        <subscriberId>
+          <subscriberId>
+            <value>{$msisdn}</value>
+          </subscriberId>
+          <subscriberExternalIdType>
+            <value>1</value>
+          </subscriberExternalIdType>
+        </subscriberId>
+        <info>
+          <attribs>1</attribs>
+          <useBillingDB changed="true" set="true"><value>true</value></useBillingDB>
+          <subscriberData changed="true" set="true"><value>true</value></subscriberData>
+          <balances changed="true" set="true"><value>1</value></balances>
+          <externalIds changed="true" set="true"><value>true</value></externalIds>
+          <offers changed="true" set="true"><value>true</value></offers>
+        </info>
+      </com:input>
+    </com:SubscriberRetrieve>
+  </soapenv:Body>
+</soapenv:Envelope>
+XML;
+
+        $ch = curl_init('http://'.$billingHost.'/services/SubscriberService');
+        if ($ch === false) {
+            return ['ok' => false, 'error' => 'Could not initialize cURL', 'status' => 0, 'raw' => ''];
+        }
+
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int) env('BTC_HTTP_CONNECT_TIMEOUT', 5));
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) env('BTC_HTTP_TIMEOUT', 12));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: text/xml; charset=utf-8',
+            'SOAPAction: ""',
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+
+        $body = curl_exec($ch);
+        $error = curl_error($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($body === false || $status < 200 || $status >= 300) {
+            return [
+                'ok' => false,
+                'error' => $error !== '' ? $error : 'SubscriberRetrieve HTTP '.$status,
+                'status' => $status,
+                'raw' => $body !== false ? (string) $body : '',
+            ];
+        }
+
+        return ['ok' => true, 'status' => $status, 'raw' => (string) $body];
+    }
+
     private function extractTokenFromSoapResponse(object $response): ?string
     {
         $direct = trim((string) ($response->return ?? $response->token ?? ''));
@@ -293,5 +340,47 @@ XML;
         }
 
         return null;
+    }
+
+    private function summarizeSubscriberRetrieveXml(string $xml): array
+    {
+        return [
+            'service_internal_id' => $this->extractXmlTag($xml, 'serviceInternalId'),
+            'account_internal_id' => $this->extractXmlTag($xml, 'accountInternalId'),
+            'subscriber_external_id' => $this->extractXmlTag($xml, 'serviceExternalId'),
+            'status_id' => $this->extractXmlTag($xml, 'statusId'),
+            'status_reason_id' => $this->extractXmlTag($xml, 'statusReasonId'),
+            'rating_state' => $this->extractXmlTag($xml, 'ratingState'),
+            'is_active' => $this->extractXmlTag($xml, 'isActive'),
+            'first_name' => $this->extractXmlTag($xml, 'serviceFname'),
+            'last_name' => $this->extractXmlTag($xml, 'serviceLname'),
+            'offers_count' => $this->countXmlTags($xml, 'offerInstances'),
+            'balances_count' => $this->countXmlTags($xml, 'balanceInstances'),
+            'external_ids_count' => $this->countXmlTags($xml, 'externalIds'),
+        ];
+    }
+
+    private function extractXmlTag(string $xml, string $tag): ?string
+    {
+        if ($xml === '') {
+            return null;
+        }
+
+        $pattern = '/<'.$tag.'(?:\s[^>]*)?>\s*(?:<value[^>]*>)?([^<]*)/i';
+        if (preg_match($pattern, $xml, $m) !== 1) {
+            return null;
+        }
+
+        $value = trim((string) ($m[1] ?? ''));
+        return $value === '' ? null : html_entity_decode($value, ENT_QUOTES | ENT_XML1);
+    }
+
+    private function countXmlTags(string $xml, string $tag): int
+    {
+        if ($xml === '') {
+            return 0;
+        }
+
+        return preg_match_all('/<'.$tag.'(?:\s|>)/i', $xml);
     }
 }
