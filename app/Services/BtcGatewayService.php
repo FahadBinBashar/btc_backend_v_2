@@ -743,6 +743,9 @@ XML;
      */
     private function curlRequest(string $method, string $url, array $headers = [], ?string $body = null): array
     {
+        $connectTimeout = (int) env('BTC_HTTP_CONNECT_TIMEOUT', 5);
+        $totalTimeout = (int) env('BTC_HTTP_TIMEOUT', 12);
+
         $ch = curl_init($url);
         if ($ch === false) {
             return ['ok' => false, 'status' => 0, 'body' => '', 'error' => 'Could not initialize cURL'];
@@ -750,8 +753,10 @@ XML;
 
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $connectTimeout);
+        curl_setopt($ch, CURLOPT_TIMEOUT, $totalTimeout);
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        curl_setopt($ch, CURLOPT_NOSIGNAL, true);
 
         if (str_starts_with($url, 'https://')) {
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

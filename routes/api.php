@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\PaymentAdminController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\ESimController;
+use App\Http\Controllers\Api\IntegrationHealthController;
 use App\Http\Controllers\Api\KycComplianceController;
 use App\Http\Controllers\Api\KycJourneyController;
 use App\Http\Controllers\Api\MetaMapController;
@@ -22,6 +23,7 @@ Route::post('/otp/verify', [OtpController::class, 'verify']);
 Route::post('/payments/record', [PaymentController::class, 'record']);
 Route::post('/metamap/config', [MetaMapController::class, 'config']);
 Route::post('/metamap/webhook', [MetaMapController::class, 'webhook']);
+Route::get('/health/integrations', [IntegrationHealthController::class, 'index']);
 
 Route::prefix('kyc')->group(function () {
     Route::post('/start', [KycJourneyController::class, 'start']);
