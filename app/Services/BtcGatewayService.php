@@ -392,7 +392,7 @@ class BtcGatewayService
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:auth="https://org.converse.rtbd.sec/webservice/auth">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:auth="https://org.comverse.rtbd.sec/webservice/auth">
   <soapenv:Header/>
   <soapenv:Body>
     <auth:proxyLogin>

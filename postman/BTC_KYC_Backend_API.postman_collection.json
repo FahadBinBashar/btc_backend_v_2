@@ -191,6 +191,64 @@
                                                                             ]
                                                               }
                                                   }
+                                  },
+                                  {
+                                      "name":  "C1 - Get Token",
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "const json = pm.response.json();",
+                                                                                    "if (json.token) pm.collectionVariables.set(\"c1_token\", String(json.token));"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ],
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{base_url}}/get-token",
+                                                                  "host":  [
+                                                                               "{{base_url}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "get-token"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "C1 - Subscriber Retrieve (Direct)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{base_url}}/subscriber?msisdn={{msisdn}}\u0026token={{c1_token}}",
+                                                                  "host":  [
+                                                                               "{{base_url}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "subscriber"
+                                                                           ],
+                                                                  "query":  [
+                                                                                {
+                                                                                    "key":  "msisdn",
+                                                                                    "value":  "{{msisdn}}"
+                                                                                },
+                                                                                {
+                                                                                    "key":  "token",
+                                                                                    "value":  "{{c1_token}}"
+                                                                                }
+                                                                            ]
+                                                              }
+                                                  }
                                   }
                               ]
                  },
@@ -2150,6 +2208,10 @@
                      {
                          "key":  "admin_role",
                          "value":  "admin"
+                     },
+                     {
+                         "key":  "c1_token",
+                         "value":  ""
                      }
                  ]
 }
