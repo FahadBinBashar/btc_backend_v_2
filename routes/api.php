@@ -6,9 +6,11 @@ use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Api\ESimController;
 use App\Http\Controllers\Api\KycComplianceController;
+use App\Http\Controllers\Api\KycJourneyController;
 use App\Http\Controllers\Api\MetaMapController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\SmegaJourneyController;
 use App\Http\Controllers\Api\SimSwapController;
 use App\Http\Controllers\Api\SubscriberController;
 use Illuminate\Support\Facades\Route;
@@ -20,6 +22,25 @@ Route::post('/otp/verify', [OtpController::class, 'verify']);
 Route::post('/payments/record', [PaymentController::class, 'record']);
 Route::post('/metamap/config', [MetaMapController::class, 'config']);
 Route::post('/metamap/webhook', [MetaMapController::class, 'webhook']);
+
+Route::prefix('kyc')->group(function () {
+    Route::post('/start', [KycJourneyController::class, 'start']);
+    Route::post('/{requestId}/msisdn', [KycJourneyController::class, 'captureMsisdn']);
+    Route::post('/{requestId}/otp/send', [KycJourneyController::class, 'sendOtp']);
+    Route::post('/{requestId}/otp/verify', [KycJourneyController::class, 'verifyOtp']);
+    Route::post('/{requestId}/profile', [KycJourneyController::class, 'saveProfile']);
+    Route::post('/{requestId}/metamap/gate', [KycJourneyController::class, 'metamapGate']);
+    Route::post('/{requestId}/complete', [KycJourneyController::class, 'complete']);
+});
+
+Route::prefix('smega')->group(function () {
+    Route::post('/start', [SmegaJourneyController::class, 'start']);
+    Route::post('/{requestId}/msisdn', [SmegaJourneyController::class, 'captureMsisdn']);
+    Route::post('/{requestId}/inline-kyc/complete', [SmegaJourneyController::class, 'completeInlineKyc']);
+    Route::post('/{requestId}/otp/send', [SmegaJourneyController::class, 'sendOtp']);
+    Route::post('/{requestId}/otp/verify', [SmegaJourneyController::class, 'verifyOtp']);
+    Route::post('/{requestId}/complete', [SmegaJourneyController::class, 'complete']);
+});
 
 Route::prefix('esim')->group(function () {
     Route::post('/start', [ESimController::class, 'start']);

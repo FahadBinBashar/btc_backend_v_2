@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\AuditLog;
 use App\Models\KycVerification;
 use App\Models\RegistrationProfile;
 use App\Models\ServiceRequest;
 use App\Models\Subscriber;
+use App\Services\BtcGatewayService;
 use App\Services\MatiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +16,10 @@ use Illuminate\Validation\Rule;
 
 class KycComplianceController extends BaseApiController
 {
+    public function __construct(private readonly BtcGatewayService $btcGateway)
+    {
+    }
+
     public function start(Request $request): JsonResponse
     {
         $serviceRequest = ServiceRequest::create([
@@ -91,21 +97,27 @@ class KycComplianceController extends BaseApiController
             $whitelisted = (bool) $subscriber->is_whitelisted;
         }
 
-        if (!$exists || !$whitelisted) {
-            $serviceRequest->status = 'number_not_verified';
-            $serviceRequest->save();
-
-            return $this->fail('Phone number is not eligible for this exercise.', 422);
-        }
+        $c1Lookup = $this->btcGateway->c1SubscriberRetrieve($normalized);
+        $c1Exists = (bool) ($c1Lookup['ok'] ?? false) && (bool) ($c1Lookup['exists'] ?? false);
+        $validProfile = $c1Exists || ($exists && $whitelisted);
+        $track = $validProfile ? 'short_track' : 'full_kyc';
 
         $serviceRequest->msisdn = $normalized;
-        $serviceRequest->current_step = 'registration';
-        $serviceRequest->status = 'number_verified';
+        $serviceRequest->current_step = $track === 'short_track' ? 'otp_verify' : 'registration';
+        $serviceRequest->status = $track === 'short_track' ? 'valid_profile' : 'profile_incomplete';
         $serviceRequest->metadata = $this->mergeMetadata($serviceRequest, [
             'number_verified_at' => now()->toISOString(),
+            'track' => $track,
+            'valid_profile' => $validProfile,
             'subscriber_lookup' => [
                 'exists' => $exists,
                 'whitelisted' => $whitelisted,
+            ],
+            'c1_lookup' => [
+                'ok' => (bool) ($c1Lookup['ok'] ?? false),
+                'exists' => (bool) ($c1Lookup['exists'] ?? false),
+                'service_internal_id' => $c1Lookup['service_internal_id'] ?? null,
+                'error' => $c1Lookup['error'] ?? null,
             ],
         ]);
         $serviceRequest->save();
@@ -113,6 +125,8 @@ class KycComplianceController extends BaseApiController
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
             'msisdn' => $serviceRequest->msisdn,
+            'track' => $track,
+            'valid_profile' => $validProfile,
             'current_step' => $serviceRequest->current_step,
             'status' => $serviceRequest->status,
         ]);
@@ -152,8 +166,9 @@ class KycComplianceController extends BaseApiController
             ])
         );
 
-        $serviceRequest->current_step = 'verification';
-        $serviceRequest->status = 'registration_completed';
+        $track = $this->resolveTrack($serviceRequest);
+        $serviceRequest->current_step = $track === 'short_track' ? 'complete' : 'verification';
+        $serviceRequest->status = $track === 'short_track' ? 'ready_to_complete' : 'registration_completed';
         $serviceRequest->metadata = $this->mergeMetadata($serviceRequest, [
             'registration_completed_at' => now()->toISOString(),
         ]);
@@ -239,6 +254,7 @@ class KycComplianceController extends BaseApiController
         $payload = $request->validate([
             'verified' => ['required', 'boolean'],
             'kyc_verification_id' => ['nullable', 'integer'],
+            'smega_requested' => ['nullable', 'boolean'],
         ]);
 
         $serviceRequest = $this->findKycRequest($requestId);
@@ -246,7 +262,8 @@ class KycComplianceController extends BaseApiController
             return $this->fail('KYC request not found.', 404);
         }
 
-        if ($payload['verified'] !== true) {
+        $track = $this->resolveTrack($serviceRequest);
+        if ($track !== 'short_track' && $payload['verified'] !== true) {
             $serviceRequest->status = 'failed';
             $serviceRequest->metadata = $this->mergeMetadata($serviceRequest, [
                 'failed_at' => now()->toISOString(),
@@ -274,17 +291,52 @@ class KycComplianceController extends BaseApiController
             $verification->save();
         }
 
+        $bocraCheck = $this->btcGateway->bocraCheckByMsisdn('267'.$serviceRequest->msisdn);
+        $smegaRequested = (bool) ($payload['smega_requested'] ?? false);
+        $smegaCheck = $smegaRequested
+            ? $this->btcGateway->smegaCheck($serviceRequest->msisdn ?? '')
+            : ['ok' => true, 'skipped' => true];
+
         $serviceRequest->current_step = 'complete';
         $serviceRequest->status = 'completed';
         $serviceRequest->metadata = $this->mergeMetadata($serviceRequest, [
             'completed_at' => now()->toISOString(),
+            'bocra_check' => [
+                'ok' => (bool) ($bocraCheck['ok'] ?? false),
+                'compliant' => (bool) ($bocraCheck['compliant'] ?? false),
+                'status' => $bocraCheck['status'] ?? null,
+            ],
+            'smega_gate' => [
+                'requested' => $smegaRequested,
+                'ok' => (bool) ($smegaCheck['ok'] ?? false),
+                'skipped' => (bool) ($smegaCheck['skipped'] ?? false),
+                'status' => $smegaCheck['status'] ?? null,
+            ],
         ]);
         $serviceRequest->save();
 
+        AuditLog::query()->create([
+            'service_request_id' => $serviceRequest->id,
+            'action' => 'KYC_TRANSACTION_LOG',
+            'ip' => $request->ip(),
+            'user_agent' => (string) $request->userAgent(),
+            'payload' => [
+                'track' => $track,
+                'request_id' => $serviceRequest->id,
+                'msisdn' => $serviceRequest->msisdn ? '****'.substr((string) $serviceRequest->msisdn, -4) : null,
+                'bocra' => $bocraCheck,
+                'smega' => $smegaCheck,
+            ],
+        ]);
+
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
+            'track' => $track,
             'current_step' => $serviceRequest->current_step,
             'status' => $serviceRequest->status,
+            'bocra_compliant' => (bool) ($bocraCheck['compliant'] ?? false),
+            'smega_requested' => $smegaRequested,
+            'smega_ok' => (bool) ($smegaCheck['ok'] ?? false),
         ]);
     }
 
@@ -300,6 +352,14 @@ class KycComplianceController extends BaseApiController
     {
         $current = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
         return array_merge($current, $next);
+    }
+
+    private function resolveTrack(ServiceRequest $serviceRequest): string
+    {
+        $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
+        $track = (string) ($metadata['track'] ?? 'full_kyc');
+
+        return in_array($track, ['short_track', 'full_kyc'], true) ? $track : 'full_kyc';
     }
 
     private function normalizeMsisdn(string $raw): ?string

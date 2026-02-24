@@ -44,4 +44,33 @@ return [
         'webhook_secret' => env('METAMAP_WEBHOOK_SECRET'),
     ],
 
+    'dpo' => [
+        'paygate_url' => env('DPO_PAYGATE_URL'),
+        'secret' => env('DPO_SECRET'),
+        'id' => env('DPO_ID'),
+    ],
+
+    'c1' => [
+        'security_ip' => env('C1_SECURITY_IP', env('c1_host')),
+        'security_user' => env('C1_SECURITY_USER', env('c1_username')),
+        'security_password' => env('C1_SECURITY_PASSWORD', env('c1_password')),
+        'realm' => env('C1_REALM', env('c1_realm', 'sapi')),
+        'billing_ip' => env('C1_BILLING_IP', env('c1_billing_host')),
+        'billing_user' => env('C1_BILLING_USER', env('c1_username')),
+    ],
+
+    'smega' => [
+        'check_ip' => env('SMEGA_CHECK_IP', env('smega_host')),
+        'check_user' => env('SMEGA_CHECK_USER', env('smega_login')),
+        'check_password' => env('SMEGA_CHECK_PASSWORD', env('smega_password')),
+        'aml_check_ip' => env('SMEGA_AML_CHECK_IP'),
+        'registration_ip' => env('SMEGA_REGISTRATION_IP'),
+        'registration_user' => env('SMEGA_REGISTRATION_USER', env('smega_login')),
+    ],
+
+    'bocra' => [
+        'sandbox_url' => env('BOCRA_SANDBOX_URL', env('bocra_host')),
+        'api_key' => env('BOCRA_API_KEY', env('bocra_api_key')),
+    ],
+
 ];

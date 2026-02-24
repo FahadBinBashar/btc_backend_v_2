@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Subscriber;
+use App\Services\BtcGatewayService;
 use Illuminate\Http\Request;
 
 class SubscriberController extends BaseApiController
 {
+    public function __construct(private readonly BtcGatewayService $btcGateway)
+    {
+    }
+
     public function lookup(Request $request)
     {
         $payload = $request->validate([
@@ -16,6 +21,21 @@ class SubscriberController extends BaseApiController
         $msisdn = $this->normalizeMsisdn($payload['msisdn']);
         if ($msisdn === null) {
             return $this->fail('Invalid phone number format.', 422);
+        }
+
+        $c1Lookup = $this->btcGateway->c1SubscriberRetrieve($msisdn);
+        if (($c1Lookup['ok'] ?? false) === true) {
+            $exists = (bool) ($c1Lookup['exists'] ?? false);
+
+            return $this->ok([
+                'msisdn' => $msisdn,
+                'exists' => $exists,
+                'source' => 'c1_billing',
+                'details' => [
+                    'service_internal_id' => $c1Lookup['service_internal_id'] ?? null,
+                    'result_code' => $c1Lookup['result_code'] ?? null,
+                ],
+            ]);
         }
 
         $subscriber = Subscriber::query()
@@ -32,10 +52,12 @@ class SubscriberController extends BaseApiController
         return $this->ok([
             'msisdn' => $msisdn,
             'exists' => $effectiveExists,
+            'source' => 'local_fallback',
             'details' => [
                 'record_exists' => $exists,
                 'is_whitelisted' => $whitelisted,
                 'bypassed_due_to_empty_seed' => !$hasSeedData,
+                'c1_error' => $c1Lookup['error'] ?? null,
             ],
         ]);
     }

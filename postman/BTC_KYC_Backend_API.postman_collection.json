@@ -68,7 +68,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"msisdn\": \"71234567\",\n  \"otp\": \"123456\"\n}",
+              "raw": "{\n  \"msisdn\": \"71234567\",\n  \"code\": \"123456\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
@@ -264,6 +264,293 @@
               "raw": "{{base_url}}/api/kyc-compliance/{{kyc_request_id}}/complete",
               "host": ["{{base_url}}"],
               "path": ["api", "kyc-compliance", "{{kyc_request_id}}", "complete"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "KYC Journey (V2.0)",
+      "item": [
+        {
+          "name": "1. Start Journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.request_id) pm.collectionVariables.set('kyc_journey_request_id', String(json.request_id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"smega_selected\": true,\n  \"source_of_income\": \"SALARY\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "start"]
+            }
+          }
+        },
+        {
+          "name": "2. Capture MSISDN",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"msisdn\": \"{{msisdn}}\",\n  \"smega_selected\": true,\n  \"source_of_income\": \"SALARY\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/msisdn",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "msisdn"]
+            }
+          }
+        },
+        {
+          "name": "3. Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.challenge_id) pm.collectionVariables.set('kyc_otp_challenge_id', String(json.challenge_id));",
+                  "if (json.debug_code) pm.collectionVariables.set('kyc_otp_code', String(json.debug_code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/otp/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "otp", "send"]
+            }
+          }
+        },
+        {
+          "name": "4. Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challenge_id\": {{kyc_otp_challenge_id}},\n  \"code\": \"{{kyc_otp_code}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/otp/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "otp", "verify"]
+            }
+          }
+        },
+        {
+          "name": "5. Save Profile",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Moffat\",\n  \"last_name\": \"Matenge\",\n  \"id_type\": \"NATIONAL_ID\",\n  \"id_number\": \"935512806\",\n  \"nationality\": \"Motswana\",\n  \"plot_number\": \"3501\",\n  \"ward\": \"Metlhabeng\",\n  \"village\": \"Tlokweng\",\n  \"city\": \"Tlokweng\",\n  \"postal_address\": \"PO Box 123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "profile"]
+            }
+          }
+        },
+        {
+          "name": "6. MetaMap Gate (for full_kyc)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verified\": true,\n  \"session_id\": \"sess_001\",\n  \"verification_id\": \"ver_001\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/metamap/gate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "metamap", "gate"]
+            }
+          }
+        },
+        {
+          "name": "7. Complete Journey",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-correlation-id", "value": "{{correlation_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/kyc/{{kyc_journey_request_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "kyc", "{{kyc_journey_request_id}}", "complete"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "SMEGA Standalone (V2.0)",
+      "item": [
+        {
+          "name": "1. Start Journey",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.request_id) pm.collectionVariables.set('smega_request_id', String(json.request_id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "start"]
+            }
+          }
+        },
+        {
+          "name": "2. Capture MSISDN",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"msisdn\": \"{{msisdn}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/{{smega_request_id}}/msisdn",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "{{smega_request_id}}", "msisdn"]
+            }
+          }
+        },
+        {
+          "name": "3. Complete Inline KYC (only non-compliant)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"metamap_verified\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/{{smega_request_id}}/inline-kyc/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "{{smega_request_id}}", "inline-kyc", "complete"]
+            }
+          }
+        },
+        {
+          "name": "4. Send OTP",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.challenge_id) pm.collectionVariables.set('smega_otp_challenge_id', String(json.challenge_id));",
+                  "if (json.debug_code) pm.collectionVariables.set('smega_otp_code', String(json.debug_code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/{{smega_request_id}}/otp/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "{{smega_request_id}}", "otp", "send"]
+            }
+          }
+        },
+        {
+          "name": "5. Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"challenge_id\": {{smega_otp_challenge_id}},\n  \"code\": \"{{smega_otp_code}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/{{smega_request_id}}/otp/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "{{smega_request_id}}", "otp", "verify"]
+            }
+          }
+        },
+        {
+          "name": "6. Complete Journey",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-correlation-id", "value": "{{correlation_id}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/smega/{{smega_request_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "smega", "{{smega_request_id}}", "complete"]
             }
           }
         }
@@ -550,6 +837,15 @@
     { "key": "esim_request_id", "value": "1" },
     { "key": "simswap_request_id", "value": "1" },
     { "key": "kyc_request_id", "value": "1" },
+    { "key": "kyc_journey_request_id", "value": "1" },
+    { "key": "smega_request_id", "value": "1" },
+    { "key": "msisdn", "value": "26773717137" },
+    { "key": "source_of_income", "value": "SALARY" },
+    { "key": "kyc_otp_challenge_id", "value": "1" },
+    { "key": "kyc_otp_code", "value": "123456" },
+    { "key": "smega_otp_challenge_id", "value": "1" },
+    { "key": "smega_otp_code", "value": "123456" },
+    { "key": "correlation_id", "value": "jrn-001" },
     { "key": "kyc_verification_id", "value": "1" },
     { "key": "metamap_document_type", "value": "omang" },
     { "key": "metamap_flow_id", "value": "" },
