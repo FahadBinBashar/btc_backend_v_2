@@ -36,6 +36,15 @@ class BtcGatewayService
         }
 
         $body = $response['body'];
+        if ($this->isSoapFault($body)) {
+            return [
+                'ok' => false,
+                'error' => $this->extractSoapFaultMessage($body) ?? 'C1 returned SOAP fault',
+                'status' => $response['status'],
+                'body' => $body,
+            ];
+        }
+
         $serviceInternalId = $this->extractXmlValue($body, 'serviceInternalId');
         $resultCode = $this->extractXmlValue($body, 'resultCode')
             ?? $this->extractXmlValue($body, 'responseCode');
@@ -281,6 +290,96 @@ class BtcGatewayService
         ];
     }
 
+    public function bocraUpdateSubscriberPatch(array $payload): array
+    {
+        $host = trim((string) config('services.bocra.sandbox_url', ''));
+        $apiKey = trim((string) config('services.bocra.api_key', ''));
+
+        if ($host === '' || $apiKey === '') {
+            return ['ok' => false, 'error' => 'BOCRA update config is incomplete'];
+        }
+
+        $baseUrl = str_starts_with($host, 'http://') || str_starts_with($host, 'https://')
+            ? rtrim($host, '/')
+            : 'https://'.rtrim($host, '/');
+
+        $request = [
+            'msisdn' => (string) ($payload['msisdn'] ?? ''),
+            'firstName' => (string) ($payload['first_name'] ?? ''),
+            'lastName' => (string) ($payload['last_name'] ?? ''),
+            'country' => (string) ($payload['country'] ?? 'BOTSWANA'),
+            'dateOfBirth' => (string) ($payload['dob_iso'] ?? ''),
+            'sex' => (string) ($payload['gender'] ?? ''),
+            'documents' => [[
+                'documentNumber' => (string) ($payload['document_number'] ?? ''),
+                'documentType' => (string) ($payload['document_type'] ?? 'NATIONAL_ID'),
+                'dateOfIssue' => (string) ($payload['document_issue_date'] ?? ''),
+                'expiryDate' => (string) ($payload['document_expiry_date'] ?? ''),
+            ]],
+        ];
+
+        $response = $this->curlRequest(
+            'PATCH',
+            $baseUrl.'/api/v1/natural_subscribers',
+            ['x-api-key: '.$apiKey, 'Accept: application/json', 'Content-Type: application/json'],
+            json_encode($request, JSON_UNESCAPED_SLASHES)
+        );
+
+        return [
+            'ok' => $response['ok'],
+            'status' => $response['status'],
+            'body' => $this->decodeJsonOrRaw($response['body']),
+            'request' => $request,
+        ];
+    }
+
+    public function bocraUpdateAddressDocumentsPatch(array $payload): array
+    {
+        $host = trim((string) config('services.bocra.sandbox_url', ''));
+        $apiKey = trim((string) config('services.bocra.api_key', ''));
+
+        if ($host === '' || $apiKey === '') {
+            return ['ok' => false, 'error' => 'BOCRA address/doc update config is incomplete'];
+        }
+
+        $baseUrl = str_starts_with($host, 'http://') || str_starts_with($host, 'https://')
+            ? rtrim($host, '/')
+            : 'https://'.rtrim($host, '/');
+
+        $request = [
+            'msisdn' => (string) ($payload['msisdn'] ?? ''),
+            'documents' => [[
+                'documentNumber' => (string) ($payload['document_number'] ?? ''),
+                'documentType' => (string) ($payload['document_type'] ?? 'NATIONAL_ID'),
+                'dateOfIssue' => (string) ($payload['document_issue_date'] ?? ''),
+                'expiryDate' => (string) ($payload['document_expiry_date'] ?? ''),
+            ]],
+            'addresses' => [[
+                'plotWardBox' => (string) ($payload['physical_address'] ?? ''),
+                'cityTown' => (string) ($payload['city'] ?? ''),
+                'addressType' => 'PHYSICAL',
+            ], [
+                'plotWardBox' => (string) ($payload['postal_address'] ?? ''),
+                'cityTown' => (string) ($payload['city'] ?? ''),
+                'addressType' => 'POSTAL',
+            ]],
+        ];
+
+        $response = $this->curlRequest(
+            'PATCH',
+            $baseUrl.'/api/v1/natural_subscribers/update_address_documents',
+            ['x-api-key: '.$apiKey, 'Accept: application/json', 'Content-Type: application/json'],
+            json_encode($request, JSON_UNESCAPED_SLASHES)
+        );
+
+        return [
+            'ok' => $response['ok'],
+            'status' => $response['status'],
+            'body' => $this->decodeJsonOrRaw($response['body']),
+            'request' => $request,
+        ];
+    }
+
     public function c1ApplyConditionalUpdates(array $payload): array
     {
         $serviceInternalId = trim((string) ($payload['service_internal_id'] ?? ''));
@@ -334,6 +433,36 @@ class BtcGatewayService
     public function c1SubscriberSuspend(string $serviceInternalId, string $comment = 'NON COMPLIANT FOR KYC'): array
     {
         return $this->c1SubscriberLifecycle($serviceInternalId, false, $comment);
+    }
+
+    public function c1SubscriberUpdateDirect(array $payload): array
+    {
+        return $this->c1SubscriberUpdate($payload);
+    }
+
+    public function c1AccountUpdateDirect(array $payload): array
+    {
+        return $this->c1AccountBaseUpdate($payload);
+    }
+
+    public function c1AddressUpdateDirect(array $payload): array
+    {
+        return $this->c1AddressUpdate($payload);
+    }
+
+    public function c1PersonaUpdateDirect(array $payload): array
+    {
+        return $this->c1PersonaUpdate($payload);
+    }
+
+    public function c1SecurityTokenDirect(): string
+    {
+        return $this->c1SecurityToken();
+    }
+
+    public function c1UpdateRatingStatusDirect(string $serviceInternalId, bool $resume): array
+    {
+        return $this->c1UpdateRatingStatus($serviceInternalId, $resume);
     }
 
     public function logTransaction(array $payload): array
@@ -404,25 +533,55 @@ class BtcGatewayService
 </soapenv:Envelope>
 XML;
 
-        $response = $this->curlRequest(
-            'POST',
-            'https://'.$securityHost.'/SAMLSignOnWS?wsdl',
-            ['Content-Type: text/xml;charset=UTF-8'],
-            $xml
-        );
-
-        if (!$response['ok']) {
+        $ch = curl_init('https://'.$securityHost.'/SAMLSignOnWS');
+        if ($ch === false) {
             return '';
         }
 
-        return (string) ($this->extractXmlValue($response['body'], 'return') ?? '');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, (int) env('BTC_HTTP_CONNECT_TIMEOUT', 5));
+        curl_setopt($ch, CURLOPT_TIMEOUT, (int) env('BTC_HTTP_TIMEOUT', 12));
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        if (defined('CURL_SSLVERSION_TLSv1_1')) {
+            curl_setopt($ch, CURLOPT_SSLVERSION, constant('CURL_SSLVERSION_TLSv1_1'));
+        }
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: text/xml; charset=utf-8',
+            'SOAPAction: ""',
+        ]);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($body === false || $status < 200 || $status >= 300) {
+            return '';
+        }
+
+        $direct = (string) ($this->extractXmlValue((string) $body, 'return') ?? '');
+        if ($direct !== '') {
+            return $direct;
+        }
+
+        $result = (string) ($this->extractXmlValue((string) $body, 'result') ?? '');
+        if ($result !== '') {
+            $decoded = html_entity_decode($result, ENT_QUOTES | ENT_XML1);
+            if (preg_match('/<Token>([^<]+)<\/Token>/', $decoded, $m) === 1) {
+                return trim((string) $m[1]);
+            }
+        }
+
+        return '';
     }
 
     private function buildC1SubscriberRetrieveXml(string $realm, string $securityToken, string $user, string $msisdn): string
     {
         return <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:SubscriberRetrieve>
@@ -438,6 +597,14 @@ XML;
             <value>1</value>
           </subscriberExternalIdType>
         </subscriberId>
+        <info>
+          <attribs>1</attribs>
+          <useBillingDB changed="true" set="true"><value>true</value></useBillingDB>
+          <subscriberData changed="true" set="true"><value>true</value></subscriberData>
+          <balances changed="true" set="true"><value>1</value></balances>
+          <externalIds changed="true" set="true"><value>true</value></externalIds>
+          <offers changed="true" set="true"><value>true</value></offers>
+        </info>
       </com:input>
     </com:SubscriberRetrieve>
   </soapenv:Body>
@@ -451,6 +618,7 @@ XML;
         $realm = trim((string) config('services.c1.realm', 'sapi'));
         $user = trim((string) config('services.c1.billing_user', ''));
         $serviceInternalId = trim((string) ($payload['service_internal_id'] ?? ''));
+        $serviceInternalIdResets = trim((string) ($payload['service_internal_id_resets'] ?? '0'));
         $msisdn = trim((string) ($payload['msisdn'] ?? ''));
         $firstName = trim((string) ($payload['first_name'] ?? ''));
         $lastName = trim((string) ($payload['last_name'] ?? ''));
@@ -464,7 +632,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:SubscriberUpdate>
@@ -474,6 +642,9 @@ XML;
         <userIdName>{$user}</userIdName>
         <subscriber>
           <serviceInternalId changed="true" set="true"><value>{$serviceInternalId}</value></serviceInternalId>
+          <serviceInternalIdResets changed="true" set="true"><value>{$serviceInternalIdResets}</value></serviceInternalIdResets>
+          <serviceExternalId changed="true" set="true"><value>{$msisdn}</value></serviceExternalId>
+          <serviceExternalIdType changed="true" set="true"><value>1</value></serviceExternalIdType>
           <serviceCompany changed="true" set="true"><value>BTC</value></serviceCompany>
           <serviceFname changed="true" set="true"><value>{$firstName}</value></serviceFname>
           <serviceLname changed="true" set="true"><value>{$lastName}</value></serviceLname>
@@ -519,7 +690,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:AccountBaseUpdate>
@@ -560,7 +731,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:AccountBaseUpdate>
@@ -605,7 +776,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:PersonaUpdate>
@@ -629,7 +800,7 @@ XML;
 </soapenv:Envelope>
 XML;
 
-        return $this->callC1Service('/services/SubscriberService', $xml);
+        return $this->callC1Service('/services/PersonaService', $xml);
     }
 
     private function c1UpdateRatingStatus(string $serviceInternalId, bool $resume): array
@@ -641,7 +812,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:SubscriberUpdateRatingStatus>
@@ -660,7 +831,18 @@ XML;
 </soapenv:Envelope>
 XML;
 
-        return $this->callC1Service('/services/SubscriberService', $xml);
+        $result = $this->callC1Service('/services/SubscriberService', $xml);
+
+        // C1 may return this when the subscriber is already in the requested rating state.
+        if (!($result['ok'] ?? false) && str_contains(strtolower((string) ($result['error'] ?? '')), 'invalid subscriber rating state')) {
+            $result['ok'] = true;
+            $result['noop'] = true;
+            $result['message'] = 'Subscriber is already in the requested rating state';
+            $result['original_error'] = $result['error'];
+            $result['error'] = null;
+        }
+
+        return $result;
     }
 
     private function c1SubscriberLifecycle(string $serviceInternalId, bool $resume, string $comment): array
@@ -672,7 +854,7 @@ XML;
 
         $xml = <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.converse.com">
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://www.comverse.com">
   <soapenv:Header/>
   <soapenv:Body>
     <com:{$action}>
@@ -712,10 +894,38 @@ XML;
         );
 
         return [
-            'ok' => $response['ok'],
+            'ok' => $response['ok'] && !$this->isSoapFault((string) $response['body']),
             'status' => $response['status'],
             'body' => $response['body'],
+            'error' => $this->isSoapFault((string) $response['body'])
+                ? ($this->extractSoapFaultMessage((string) $response['body']) ?? 'C1 returned SOAP fault')
+                : ($response['error'] ?? null),
         ];
+    }
+
+    private function isSoapFault(string $xml): bool
+    {
+        if ($xml === '') {
+            return false;
+        }
+
+        return preg_match('/<([a-zA-Z0-9_]+:)?Fault(?:\s|>)/', $xml) === 1;
+    }
+
+    private function extractSoapFaultMessage(string $xml): ?string
+    {
+        $faultString = $this->extractXmlValue($xml, 'faultstring');
+        if (is_string($faultString) && trim($faultString) !== '') {
+            return trim($faultString);
+        }
+
+        $message = $this->extractXmlValue($xml, 'message');
+        if (is_string($message) && trim($message) !== '') {
+            return trim($message);
+        }
+
+        $code = $this->extractXmlValue($xml, 'messageCode');
+        return is_string($code) && trim($code) !== '' ? trim($code) : null;
     }
 
     private function extractXmlValue(string $xml, string $tag): ?string
@@ -724,9 +934,14 @@ XML;
             return null;
         }
 
-        $pattern = '/<([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'>\s*([^<]+)\s*<\/([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'>/';
-        if (preg_match($pattern, $xml, $matches) === 1) {
+        $directPattern = '/<([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'(?:\s[^>]*)?>\s*([^<]+)\s*<\/([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'>/i';
+        if (preg_match($directPattern, $xml, $matches) === 1) {
             return trim((string) $matches[2]);
+        }
+
+        $nestedValuePattern = '/<([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'(?:\s[^>]*)?>\s*<([a-zA-Z0-9_]+:)?value(?:\s[^>]*)?>\s*([^<]+)\s*<\/([a-zA-Z0-9_]+:)?value>\s*<\/([a-zA-Z0-9_]+:)?'.preg_quote($tag, '/').'>/is';
+        if (preg_match($nestedValuePattern, $xml, $matches) === 1) {
+            return trim((string) $matches[3]);
         }
 
         return null;

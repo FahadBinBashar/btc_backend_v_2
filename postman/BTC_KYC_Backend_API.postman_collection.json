@@ -2119,7 +2119,7 @@
     "variable":  [
                      {
                          "key":  "base_url",
-                         "value":  "http://127.0.0.1:8000"
+                         "value":  "http://10.6.1.202/btc_backend_v_2/public"
                      },
                      {
                          "key":  "admin_email",
@@ -2215,3 +2215,5 @@
                      }
                  ]
 }
+
+

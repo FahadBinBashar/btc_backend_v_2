@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Services\BtcGatewayService;
 
 class C1Controller extends Controller
 {
@@ -106,6 +107,58 @@ class C1Controller extends Controller
             'summary' => $this->summarizeSubscriberRetrieveXml((string) ($result['raw'] ?? '')),
             'raw' => $request->boolean('debug') ? ($result['raw'] ?? '') : null,
         ]);
+    }
+
+    public function c1SubscriberUpdate(Request $request, BtcGatewayService $btc): JsonResponse
+    {
+        $payload = $this->buildC1UpdatePayload($request);
+        $result = $btc->c1SubscriberUpdateDirect($payload);
+
+        return response()->json([
+            'success' => (bool) ($result['ok'] ?? false),
+            'api' => 'SubscriberUpdate',
+            'payload' => $payload,
+            'result' => $result,
+        ], ($result['ok'] ?? false) ? 200 : 500);
+    }
+
+    public function c1AccountUpdate(Request $request, BtcGatewayService $btc): JsonResponse
+    {
+        $payload = $this->buildC1UpdatePayload($request);
+        $result = $btc->c1AccountUpdateDirect($payload);
+
+        return response()->json([
+            'success' => (bool) ($result['ok'] ?? false),
+            'api' => 'AccountUpdate',
+            'payload' => $payload,
+            'result' => $result,
+        ], ($result['ok'] ?? false) ? 200 : 500);
+    }
+
+    public function c1AddressUpdate(Request $request, BtcGatewayService $btc): JsonResponse
+    {
+        $payload = $this->buildC1UpdatePayload($request);
+        $result = $btc->c1AddressUpdateDirect($payload);
+
+        return response()->json([
+            'success' => (bool) ($result['ok'] ?? false),
+            'api' => 'AddressUpdate',
+            'payload' => $payload,
+            'result' => $result,
+        ], ($result['ok'] ?? false) ? 200 : 500);
+    }
+
+    public function c1PersonaUpdate(Request $request, BtcGatewayService $btc): JsonResponse
+    {
+        $payload = $this->buildC1UpdatePayload($request);
+        $result = $btc->c1PersonaUpdateDirect($payload);
+
+        return response()->json([
+            'success' => (bool) ($result['ok'] ?? false),
+            'api' => 'PersonaUpdate',
+            'payload' => $payload,
+            'result' => $result,
+        ], ($result['ok'] ?? false) ? 200 : 500);
     }
 
     private function fetchToken(): object
@@ -382,5 +435,24 @@ XML;
         }
 
         return preg_match_all('/<'.$tag.'(?:\s|>)/i', $xml);
+    }
+
+    private function buildC1UpdatePayload(Request $request): array
+    {
+        return [
+            'service_internal_id' => (string) $request->input('service_internal_id', (string) env('service_internal_id', '')),
+            'account_internal_id' => (string) $request->input('account_internal_id', (string) env('account_internal_id', '')),
+            'persona_internal_id' => (string) $request->input('persona_internal_id', ''),
+            'msisdn' => (string) $request->input('msisdn', (string) env('msisdn', '26773717137')),
+            'first_name' => (string) $request->input('first_name', (string) env('first_name', '')),
+            'last_name' => (string) $request->input('last_name', (string) env('last_name', '')),
+            'address' => (string) $request->input('address', (string) env('address_line1', '')),
+            'city' => (string) $request->input('city', (string) env('city', '')),
+            'email' => (string) $request->input('email', (string) env('email', '')),
+            'document_number' => (string) $request->input('document_number', (string) env('document_number', '')),
+            'nationality' => (string) $request->input('nationality', (string) env('nationality', '')),
+            'dob' => (string) $request->input('dob', (string) env('dob', '')),
+            'gender' => (string) $request->input('gender', (string) env('gender', '')),
+        ];
     }
 }

@@ -793,7 +793,7 @@
     },
     {
       "key": "middleware_host",
-      "value": "localhost:8000"
+      "value": "10.6.1.202/btc_backend_v_2/public"
     },
     {
       "key": "msisdn",
