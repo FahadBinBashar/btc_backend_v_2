@@ -76,7 +76,9 @@ class Rev12ApiTestController extends Controller
     public function updateRatingStatus(Request $request, BtcGatewayService $btc): JsonResponse
     {
         $serviceInternalId = (string) $request->input('service_internal_id', env('service_internal_id', ''));
-        $resume = (bool) $request->input('resume', true);
+        $resumeInput = $request->input('resume', true);
+        $resume = filter_var($resumeInput, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        $resume = $resume ?? true;
         $result = $btc->c1UpdateRatingStatusDirect($serviceInternalId, $resume);
 
         return $this->result('UpdateRatingStatus', $result);
@@ -201,4 +203,3 @@ class Rev12ApiTestController extends Controller
         ];
     }
 }
-

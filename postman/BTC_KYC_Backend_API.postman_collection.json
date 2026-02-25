@@ -1155,7 +1155,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"smega_selected\": true,\n  \"source_of_income\": \"SALARY\"\n}",
+                                                                   "raw":  "{\n  \"smega_selected\": {{smega_selected}},\n  \"source_of_income\": \"{{source_of_income}}\"\n}",
                                                                    "options":  {
                                                                                    "raw":  {
                                                                                                "language":  "json"
@@ -1187,7 +1187,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{\n  \"msisdn\": \"{{msisdn}}\",\n  \"smega_selected\": true,\n  \"source_of_income\": \"SALARY\"\n}",
+                                                                   "raw":  "{\n  \"terms_accepted\": true,\n  \"msisdn\": \"{{msisdn}}\",\n  \"smega_selected\": {{smega_selected}},\n  \"source_of_income\": \"{{source_of_income}}\"\n}",
                                                                    "options":  {
                                                                                    "raw":  {
                                                                                                "language":  "json"
@@ -1233,7 +1233,7 @@
                                                                  ],
                                                       "body":  {
                                                                    "mode":  "raw",
-                                                                   "raw":  "{}",
+                                                                   "raw":  "{\n  \"apply_rating_status\": false\n}",
                                                                    "options":  {
                                                                                    "raw":  {
                                                                                                "language":  "json"
@@ -2156,6 +2156,10 @@
                      {
                          "key":  "msisdn",
                          "value":  "26773717137"
+                     },
+                     {
+                         "key":  "smega_selected",
+                         "value":  "true"
                      },
                      {
                          "key":  "source_of_income",

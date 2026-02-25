@@ -277,7 +277,7 @@ class BtcGatewayService
 
         $response = $this->curlRequest(
             'POST',
-            $baseUrl.'/api/v1/natural_subscribers/update_address_documents',
+            $baseUrl.'/api/v1/natural_subscribers',
             ['x-api-key: '.$apiKey, 'Accept: application/json', 'Content-Type: application/json'],
             json_encode($request, JSON_UNESCAPED_SLASHES)
         );

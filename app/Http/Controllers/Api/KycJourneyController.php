@@ -47,6 +47,7 @@ class KycJourneyController extends BaseApiController
     public function captureMsisdn(Request $request, string $requestId): JsonResponse
     {
         $payload = $request->validate([
+            'terms_accepted' => ['required', 'boolean'],
             'msisdn' => ['required', 'string', 'max:20'],
             'smega_selected' => ['nullable', 'boolean'],
             'source_of_income' => ['nullable', 'string', 'max:100'],
@@ -62,11 +63,12 @@ class KycJourneyController extends BaseApiController
             return $this->fail('Invalid phone number format.', 422);
         }
 
-        $c1 = $this->btcGateway->c1SubscriberRetrieve($msisdn);
-        $profileValid = (bool) ($c1['ok'] ?? false) && (bool) ($c1['exists'] ?? false);
-        $track = $profileValid ? 'short_track' : 'full_kyc';
+        if ((bool) $payload['terms_accepted'] !== true) {
+            return $this->fail('Terms must be accepted before continuing.', 422);
+        }
 
         $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
+        $metadata['terms_accepted'] = true;
         if (array_key_exists('smega_selected', $payload)) {
             $metadata['smega_selected'] = (bool) $payload['smega_selected'];
             $metadata['journey_type'] = $metadata['smega_selected'] ? 'kyc_with_smega' : 'kyc_standalone';
@@ -74,16 +76,6 @@ class KycJourneyController extends BaseApiController
         if (!empty($payload['source_of_income'])) {
             $metadata['source_of_income'] = $payload['source_of_income'];
         }
-
-        $metadata['track'] = $track;
-        $metadata['profile_valid'] = $profileValid;
-        $metadata['c1_lookup'] = [
-            'ok' => (bool) ($c1['ok'] ?? false),
-            'exists' => (bool) ($c1['exists'] ?? false),
-            'service_internal_id' => $c1['service_internal_id'] ?? null,
-            'status' => $c1['status'] ?? null,
-            'error' => $c1['error'] ?? null,
-        ];
 
         $serviceRequest->msisdn = $msisdn;
         $serviceRequest->status = 'awaiting_otp';
@@ -93,8 +85,8 @@ class KycJourneyController extends BaseApiController
 
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
-            'track' => $track,
-            'profile_valid' => $profileValid,
+            'terms_accepted' => true,
+            'smega_selected' => (bool) ($metadata['smega_selected'] ?? false),
             'current_step' => $serviceRequest->current_step,
         ]);
     }
@@ -164,14 +156,29 @@ class KycJourneyController extends BaseApiController
         $challenge->verified_at = now();
         $challenge->save();
 
-        $track = $this->resolveTrack($serviceRequest);
+        $c1 = $this->btcGateway->c1SubscriberRetrieve((string) $serviceRequest->msisdn);
+        $profileValid = (bool) ($c1['ok'] ?? false) && (bool) ($c1['exists'] ?? false);
+        $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
+        $metadata['track'] = $profileValid ? 'short_track' : 'full_kyc';
+        $metadata['profile_valid'] = $profileValid;
+        $metadata['c1_lookup'] = [
+            'ok' => (bool) ($c1['ok'] ?? false),
+            'exists' => (bool) ($c1['exists'] ?? false),
+            'service_internal_id' => $c1['service_internal_id'] ?? null,
+            'status' => $c1['status'] ?? null,
+            'error' => $c1['error'] ?? null,
+        ];
+
         $serviceRequest->status = 'otp_verified';
-        $serviceRequest->current_step = $track === 'short_track' ? 'address_update' : 'profile_capture';
+        $serviceRequest->current_step = 'profile_capture';
+        $serviceRequest->metadata = $metadata;
         $serviceRequest->save();
 
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
-            'track' => $track,
+            'track' => (string) ($metadata['track'] ?? 'full_kyc'),
+            'profile_valid' => $profileValid,
+            'c1_lookup_ok' => (bool) ($c1['ok'] ?? false),
             'current_step' => $serviceRequest->current_step,
             'status' => $serviceRequest->status,
         ]);
@@ -231,15 +238,14 @@ class KycJourneyController extends BaseApiController
             'persona_internal_id' => $payload['persona_internal_id'] ?? null,
         ];
 
-        $track = $this->resolveTrack($serviceRequest);
         $serviceRequest->status = 'profile_captured';
-        $serviceRequest->current_step = $track === 'short_track' ? 'c1_update' : 'metamap_verification';
+        $serviceRequest->current_step = 'metamap_verification';
         $serviceRequest->metadata = $metadata;
         $serviceRequest->save();
 
         return $this->ok([
             'request_id' => (string) $serviceRequest->id,
-            'track' => $track,
+            'track' => $this->resolveTrack($serviceRequest),
             'current_step' => $serviceRequest->current_step,
         ]);
     }
@@ -259,10 +265,12 @@ class KycJourneyController extends BaseApiController
 
         $track = $this->resolveTrack($serviceRequest);
         if ($track === 'short_track') {
+            $serviceRequest->current_step = 'bocra_gate';
+            $serviceRequest->save();
             return $this->ok([
                 'request_id' => (string) $serviceRequest->id,
                 'message' => 'MetaMap skipped for short track',
-                'current_step' => 'c1_update',
+                'current_step' => 'bocra_gate',
             ]);
         }
 
@@ -300,6 +308,10 @@ class KycJourneyController extends BaseApiController
 
     public function complete(Request $request, string $requestId): JsonResponse
     {
+        $payload = $request->validate([
+            'apply_rating_status' => ['nullable', 'boolean'],
+        ]);
+
         $serviceRequest = $this->findJourney($requestId);
         if (!$serviceRequest) {
             return $this->fail('KYC journey not found.', 404);
@@ -307,63 +319,91 @@ class KycJourneyController extends BaseApiController
 
         $metadata = is_array($serviceRequest->metadata) ? $serviceRequest->metadata : [];
         $track = $this->resolveTrack($serviceRequest);
+        $profile = is_array($metadata['full_profile'] ?? null) ? $metadata['full_profile'] : [];
+        $c1Lookup = is_array($metadata['c1_lookup'] ?? null) ? $metadata['c1_lookup'] : [];
+        $fullMsisdn = '267'.(string) $serviceRequest->msisdn;
+        $documentNumber = (string) ($profile['id_number'] ?? '');
 
+        $bocraMsisdn = $this->btcGateway->bocraCheckByMsisdn($fullMsisdn);
+        $bocraDocument = $documentNumber !== ''
+            ? $this->btcGateway->bocraCheckByDocument($documentNumber)
+            : ['ok' => false, 'exists' => false, 'error' => 'Document number is required for BOCRA document check'];
+
+        $initialCompliant = (bool) ($bocraMsisdn['compliant'] ?? false) || (bool) ($bocraDocument['exists'] ?? false);
         $bocra = [
-            'ok' => true,
-            'compliant' => true,
-            'bypassed' => true,
+            'msisdn_check' => $bocraMsisdn,
+            'document_check' => $bocraDocument,
+            'initial_compliant' => $initialCompliant,
+            'compliant' => $initialCompliant,
+            'actions' => [],
         ];
-
-        if ($track === 'full_kyc') {
-            $bocra = $this->btcGateway->bocraCheckByMsisdn('267'.(string) $serviceRequest->msisdn);
-            $bocra['bypassed'] = (bool) ($bocra['compliant'] ?? false);
-
-            if (!(bool) ($bocra['compliant'] ?? false)) {
-                $profile = is_array($metadata['full_profile'] ?? null) ? $metadata['full_profile'] : [];
-                $bocraDoc = $this->btcGateway->bocraCheckByDocument((string) ($profile['id_number'] ?? ''));
-                $bocraRegister = $this->btcGateway->bocraRegisterSubscriber([
-                    'msisdn' => '267'.(string) $serviceRequest->msisdn,
-                    'first_name' => (string) ($profile['first_name'] ?? ''),
-                    'last_name' => (string) ($profile['last_name'] ?? ''),
-                    'gender' => (string) ($profile['gender'] ?? 'MALE'),
-                    'document_number' => (string) ($profile['id_number'] ?? ''),
-                    'document_type' => (string) ($profile['id_type'] ?? 'NATIONAL_ID'),
-                    'physical_address' => (string) ($profile['address'] ?? ''),
-                    'postal_address' => (string) ($profile['address'] ?? ''),
-                    'city' => (string) ($profile['city'] ?? ''),
-                ]);
-                $bocra['doc_check'] = $bocraDoc;
-                $bocra['register'] = $bocraRegister;
-                $bocra['compliant'] = (bool) ($bocraRegister['ok'] ?? false);
-            }
-        }
 
         $smegaSelected = (bool) ($metadata['smega_selected'] ?? false);
         $smega = ['requested' => $smegaSelected, 'ok' => true, 'action' => 'skipped'];
-        $profile = is_array($metadata['full_profile'] ?? null) ? $metadata['full_profile'] : [];
-        $c1Lookup = is_array($metadata['c1_lookup'] ?? null) ? $metadata['c1_lookup'] : [];
-
-        $c1Updates = $this->btcGateway->c1ApplyConditionalUpdates([
-            'service_internal_id' => $c1Lookup['service_internal_id'] ?? null,
-            'account_internal_id' => $profile['account_internal_id'] ?? null,
-            'persona_internal_id' => $profile['persona_internal_id'] ?? null,
-            'msisdn' => '267'.(string) $serviceRequest->msisdn,
-            'first_name' => $profile['first_name'] ?? '',
-            'last_name' => $profile['last_name'] ?? '',
-            'address' => $profile['address'] ?? ($profile['postal_address'] ?? ''),
-            'city' => $profile['city'] ?? '',
-            'email' => $profile['email'] ?? '',
-            'nationality' => $profile['nationality'] ?? '',
-            'document_number' => $profile['id_number'] ?? '',
-            'dob' => $profile['dob'] ?? '',
-            'gender' => $profile['gender'] ?? '',
-            'resume' => true,
-        ]);
-
-        $lifecycle = null;
+        $c1Updates = ['ok' => true, 'skipped' => true, 'reason' => 'Skipped for already-compliant subscriber'];
+        $ratingUpdate = ['ok' => true, 'skipped' => true];
+        $lifecycle = ['ok' => true, 'skipped' => true];
         $serviceInternalId = (string) ($c1Lookup['service_internal_id'] ?? '');
-        if ($serviceInternalId !== '') {
-            $lifecycle = $this->btcGateway->c1SubscriberResume($serviceInternalId, 'KYC complete');
+
+        if (!$initialCompliant) {
+            if (empty($profile) || $documentNumber === '') {
+                return $this->fail('Non-compliant subscriber requires full KYC profile (including document number) before completion.', 422);
+            }
+
+            $bocraPayload = [
+                'msisdn' => $fullMsisdn,
+                'first_name' => (string) ($profile['first_name'] ?? ''),
+                'last_name' => (string) ($profile['last_name'] ?? ''),
+                'gender' => (string) ($profile['gender'] ?? 'MALE'),
+                'document_number' => $documentNumber,
+                'document_type' => (string) ($profile['id_type'] ?? 'NATIONAL_ID'),
+                'physical_address' => (string) ($profile['address'] ?? ''),
+                'postal_address' => (string) (($profile['postal_address'] ?? '') !== '' ? $profile['postal_address'] : ($profile['address'] ?? '')),
+                'city' => (string) ($profile['city'] ?? ''),
+            ];
+
+            if ((bool) ($bocraDocument['exists'] ?? false)) {
+                $bocra['actions']['update_subscriber'] = $this->btcGateway->bocraUpdateSubscriberPatch($bocraPayload);
+                $bocra['actions']['update_address_documents'] = $this->btcGateway->bocraUpdateAddressDocumentsPatch($bocraPayload);
+            } else {
+                $bocra['actions']['register'] = $this->btcGateway->bocraRegisterSubscriber($bocraPayload);
+            }
+
+            $bocraRecheck = $this->btcGateway->bocraCheckByMsisdn($fullMsisdn);
+            $bocra['post_update_msisdn_check'] = $bocraRecheck;
+            $bocra['compliant'] = (bool) ($bocraRecheck['compliant'] ?? false);
+
+            $c1Updates = $this->btcGateway->c1ApplyConditionalUpdates([
+                'service_internal_id' => $c1Lookup['service_internal_id'] ?? null,
+                'account_internal_id' => $profile['account_internal_id'] ?? null,
+                'persona_internal_id' => $profile['persona_internal_id'] ?? null,
+                'msisdn' => $fullMsisdn,
+                'first_name' => $profile['first_name'] ?? '',
+                'last_name' => $profile['last_name'] ?? '',
+                'address' => $profile['address'] ?? ($profile['postal_address'] ?? ''),
+                'city' => $profile['city'] ?? '',
+                'email' => $profile['email'] ?? '',
+                'nationality' => $profile['nationality'] ?? '',
+                'document_number' => $profile['id_number'] ?? '',
+                'dob' => $profile['dob'] ?? '',
+                'gender' => $profile['gender'] ?? '',
+                'resume' => (bool) ($bocra['compliant'] ?? false),
+            ]);
+
+            if ($serviceInternalId !== '') {
+                $lifecycle = (bool) ($bocra['compliant'] ?? false)
+                    ? $this->btcGateway->c1SubscriberResume($serviceInternalId, 'KYC complete')
+                    : $this->btcGateway->c1SubscriberSuspend($serviceInternalId, 'KYC non-compliant after BOCRA checks');
+
+                if ((bool) ($payload['apply_rating_status'] ?? false)) {
+                    $ratingUpdate = $this->btcGateway->c1UpdateRatingStatusDirect(
+                        $serviceInternalId,
+                        (bool) ($bocra['compliant'] ?? false)
+                    );
+                }
+            } else {
+                $lifecycle = ['ok' => false, 'error' => 'Missing service_internal_id for C1 lifecycle call'];
+            }
         }
 
         if ($smegaSelected) {
@@ -389,6 +429,7 @@ class KycJourneyController extends BaseApiController
         $metadata['smega'] = $smega;
         $metadata['c1_updates'] = $c1Updates;
         $metadata['c1_lifecycle'] = $lifecycle;
+        $metadata['c1_rating_status'] = $ratingUpdate;
 
         $serviceRequest->status = 'completed';
         $serviceRequest->current_step = 'done';
@@ -409,6 +450,7 @@ class KycJourneyController extends BaseApiController
                 'smega' => $smega,
                 'c1_updates' => $c1Updates,
                 'c1_lifecycle' => $lifecycle,
+                'c1_rating_status' => $ratingUpdate,
             ],
         ]);
 
@@ -422,7 +464,7 @@ class KycJourneyController extends BaseApiController
             'msisdn' => $this->maskMsisdn((string) $serviceRequest->msisdn),
             'api_called' => 'KYC_JOURNEY_COMPLETE',
             'request_payload' => ['track' => $track],
-            'response_payload' => ['bocra' => $bocra, 'smega' => $smega, 'c1_updates' => $c1Updates],
+            'response_payload' => ['bocra' => $bocra, 'smega' => $smega, 'c1_updates' => $c1Updates, 'c1_rating_status' => $ratingUpdate],
             'status_code' => '200',
         ]);
 
@@ -430,10 +472,15 @@ class KycJourneyController extends BaseApiController
             'request_id' => (string) $serviceRequest->id,
             'journey_type' => $metadata['journey_type'] ?? 'kyc_standalone',
             'track' => $track,
-            'kyc_status' => 'complete',
+            'kyc_status' => (bool) ($bocra['compliant'] ?? false) ? 'complete' : 'non_compliant',
+            'compliance' => [
+                'initial_compliant' => (bool) ($bocra['initial_compliant'] ?? false),
+                'final_compliant' => (bool) ($bocra['compliant'] ?? false),
+            ],
             'smega_status' => $smega['action'] ?? 'skipped',
             'c1_updates_ok' => (bool) ($c1Updates['ok'] ?? false),
             'c1_lifecycle_ok' => (bool) ($lifecycle['ok'] ?? false),
+            'c1_rating_status_ok' => (bool) ($ratingUpdate['ok'] ?? false),
             'external_log_ok' => (bool) ($externalLog['ok'] ?? false),
         ]);
     }
